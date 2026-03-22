@@ -1,5 +1,8 @@
--e Flask
+Flask
 flask_cors
 qrcode
 spotipy
 python-dotenv
+Flask-SQLAlchemy
+Flask-Login
+Flask-Bcrypt
