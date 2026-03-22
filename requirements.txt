@@ -1,0 +1,5 @@
+-e Flask
+flask_cors
+qrcode
+spotipy
+python-dotenv

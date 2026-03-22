@@ -1,0 +1,13 @@
+# Security / Secrets
+.env
+.cache
+
+# Logs
+sacem_log.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
