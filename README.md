@@ -1,30 +1,20 @@
-# Impro Remote + SACEM Tracker
+# PA 🤖 Régisseur IA (Anciennement DJ_Impro)
 
-Un outil de télécommande via interface web (PWA) pour la gestion de la musique et des playlists Spotify lors de spectacles d'improvisation, incluant un suivi de diffusion (log SACEM).
+Le premier Régisseur IA Open Source pour le spectacle vivant et l'improvisation théâtrale.
 
-## Prérequis
-- Python 3.8+
-- Un compte Spotify (Premium recommandé pour le contrôle de lecture)
-- Une application développeur Spotify (pour les tokens API)
+## 🎯 La Vision
+Passer d'une simple "télécommande web" à un Agent Autonome (LMM/Audio) capable de regarder, écouter une scène, et de déclencher la musique avec le bon timing et la bonne émotion.
 
-## Installation
+Actuellement en **V1 (Outil de Régie Connecté par Plugins)**.
+Prochaine étape **V2 (Évaluation par IA et pipeline vidéo)**.
 
-1. Cloner ou télécharger ce projet.
-2. Installer les dépendances :
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Créer un fichier `.env` à la racine et y ajouter vos accès Spotify :
-   ```env
-   SPOTIPY_CLIENT_ID='votre_client_id'
-   SPOTIPY_CLIENT_SECRET='votre_client_secret'
-   SPOTIPY_REDIRECT_URI='http://localhost:8080'
-   ```
+## 🧩 Architecture par Plugins
+Le cœur (Core) est ultra-léger (serveur Flask sans dépendance métier). Les actions sont gérées par des plugins dynamiques.
+Consultez [BOUNTIES.md](BOUNTIES.md) pour voir les plugins les plus demandés par la communauté (QLab, Apple Music, DMX) et gagnez des points en les développant !
 
-## Lancement
-
-Exécutez le serveur web local (depuis le dossier du projet) :
-```bash
-python impro_remote_server.py
-```
-Le terminal affichera l'URL `http://<VOTRE_IP_LOCALE>:5000`. Vous pouvez y accéder depuis n'importe quel appareil connecté au même réseau Wi-Fi (mobile, tablette) pour contrôler la musique.
+## 🚀 Installation Rapide
+1. Cloner ce projet : `git clone https://github.com/versila22/DJ_Impro.git`
+2. Installer les dépendances : `pip install -r requirements.txt`
+3. Configurer vos clés de plugins (ex: Spotify API) dans `.env`.
+4. Lancer le serveur localement : `python impro_remote_server.py`
+Le terminal affichera l'URL `http://<VOTRE_IP_LOCALE>:5000`. Accédez-y depuis votre smartphone.

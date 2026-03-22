@@ -2,9 +2,9 @@ import os
 import sys
 import subprocess
 import socket
+import importlib.util
 from flask import Flask, render_template_string, request, jsonify, send_file
 from flask_cors import CORS
-import qrcode
 import json
 import csv
 from datetime import datetime
@@ -12,71 +12,94 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)
 
-# Configuration des scripts
+# Configuration
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
-VENV_PYTHON = sys.executable
+PLUGINS_DIR = os.path.join(SCRIPTS_DIR, "plugins")
 LOG_FILE = os.path.join(SCRIPTS_DIR, "sacem_log.json")
+VENV_PYTHON = sys.executable
 
-def run_script(script_name, arg=None):
-    script_path = os.path.join(SCRIPTS_DIR, script_name)
-    cmd = [VENV_PYTHON, script_path]
-    if arg:
-        cmd.append(arg)
-    try:
-        subprocess.Popen(cmd)
-        return True
-    except Exception as e:
-        print(f"Erreur lancement {script_name}: {e}")
-        return False
+plugins = {}
 
-# HTML de l'interface mobile
+def load_plugins():
+    global plugins
+    plugins = {}
+    if not os.path.exists(PLUGINS_DIR):
+        return
+    for filename in os.listdir(PLUGINS_DIR):
+        if filename.endswith("_plugin.py"):
+            name = filename[:-3]
+            filepath = os.path.join(PLUGINS_DIR, filename)
+            spec = importlib.util.spec_from_file_location(name, filepath)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            if hasattr(mod, "get_config") and hasattr(mod, "execute"):
+                plugins[name] = {
+                    "module": mod,
+                    "config": mod.get_config()
+                }
+
+load_plugins()
+
 HTML_INTERFACE = """
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Impro Remote + SACEM</title>
+    <title>PA 🤖 Régisseur IA</title>
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; background-color: #121212; color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
         h1 { color: #1DB954; text-align: center; font-size: 1.5rem; margin-bottom: 2rem; }
-        .playlist-btn { background: #282828; border: none; border-radius: 15px; padding: 20px; margin-bottom: 15px; color: white; font-size: 1.1rem; font-weight: bold; width: 100%; display: flex; align-items: center; gap: 15px; cursor: pointer; }
-        .playlist-btn:active { background: #333; transform: scale(0.98); }
-        .icon { font-size: 1.5rem; }
-        .footer-btns { margin-top: auto; display: flex; gap: 15px; padding-bottom: 20px; }
+        .playlist-btn { border: none; border-radius: 15px; padding: 20px; margin-bottom: 15px; color: white; font-size: 1.1rem; font-weight: bold; width: 100%; display: flex; align-items: center; gap: 15px; cursor: pointer; }
+        .playlist-btn:active { transform: scale(0.98); }
+        .footer-btns { margin-top: auto; display: flex; flex-wrap: wrap; gap: 15px; padding-bottom: 20px; }
         .action-btn { flex: 1; color: white; border: none; border-radius: 12px; padding: 20px; font-weight: bold; font-size: 1rem; cursor: pointer; }
-        .fade-btn { background: #f39c12; }
-        .stop-btn { background: #e74c3c; }
-        .sacem-btn { background: #3498db; margin-top: 10px; width: 100%; }
+        .action-btn:active { transform: scale(0.98); }
+        .sacem-btn { background: #3498db; margin-top: 10px; width: 100%; flex: none; }
         #status { text-align: center; font-size: 0.8rem; color: #666; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h1>PA 🤖 Impro Remote</h1>
-    
-    <button class="playlist-btn" onclick="cmd('launch_impro')">
-        <span class="icon">🎤</span> Lip Sync Seul
-    </button>
-    <button class="playlist-btn" onclick="cmd('launch_cabaret')">
-        <span class="icon">🔞</span> Cabaret +16
-    </button>
-    <button class="playlist-btn" onclick="cmd('launch_match')">
-        <span class="icon">🎈</span> Match +9
-    </button>
-
-    <div class="footer-btns" style="flex-wrap: wrap;">
-        <button class="action-btn fade-btn" onclick="cmd('fade')">📉 FADE</button>
-        <button class="action-btn stop-btn" onclick="cmd('stop')">🛑 STOP</button>
+    <h1>PA 🤖 Régisseur IA</h1>
+    <div id="main-btns"></div>
+    <div class="footer-btns" id="footer-btns">
         <button class="action-btn sacem-btn" onclick="downloadSacem()">📑 Télécharger Fiche SACEM</button>
     </div>
-    
-    <div id="status">Prêt</div>
+    <div id="status">Chargement des plugins...</div>
 
     <script>
-        function cmd(action) {
+        fetch('/api/config')
+            .then(r => r.json())
+            .then(data => {
+                const main = document.getElementById('main-btns');
+                const footer = document.getElementById('footer-btns');
+                const sacemBtn = footer.querySelector('.sacem-btn');
+                
+                document.getElementById('status').innerText = 'Prêt';
+
+                for (const [pluginName, pluginData] of Object.entries(data)) {
+                    pluginData.buttons.forEach(b => {
+                        const btn = document.createElement('button');
+                        btn.innerHTML = b.label;
+                        btn.style.background = b.color || '#282828';
+                        btn.onclick = () => cmd(pluginName, b.id);
+                        
+                        if (b.is_footer) {
+                            btn.className = 'action-btn';
+                            footer.insertBefore(btn, sacemBtn);
+                        } else {
+                            btn.className = 'playlist-btn';
+                            main.appendChild(btn);
+                        }
+                    });
+                }
+            })
+            .catch(e => { document.getElementById('status').innerText = 'Erreur UI: ' + e; });
+
+        function cmd(plugin, action) {
             const status = document.getElementById('status');
-            status.innerText = 'Envoi: ' + action + '...';
-            fetch('/api/' + action)
+            status.innerText = 'Envoi...';
+            fetch(`/api/execute/${plugin}/${action}`)
                 .then(r => r.json())
                 .then(data => {
                     status.innerText = data.message;
@@ -89,7 +112,6 @@ HTML_INTERFACE = """
             window.location.href = '/api/download_sacem';
         }
 
-        // Auto-log SACEM toutes les 10 secondes si la page est ouverte
         setInterval(() => {
             fetch('/api/log_sacem');
         }, 10000);
@@ -102,9 +124,27 @@ HTML_INTERFACE = """
 def index():
     return render_template_string(HTML_INTERFACE)
 
+@app.route('/api/config')
+def get_config():
+    res = {}
+    for k, v in plugins.items():
+        res[k] = v['config']
+    return jsonify(res)
+
+@app.route('/api/execute/<plugin>/<action>')
+def execute_action(plugin, action):
+    if plugin in plugins:
+        success = plugins[plugin]['module'].execute(action)
+        if success:
+            return jsonify({"message": "Action envoyée"})
+        else:
+            return jsonify({"message": "Erreur exécution"}), 500
+    return jsonify({"message": "Plugin inconnu"}), 404
+
 @app.route('/api/log_sacem')
 def log_sacem():
-    run_script("sacem_logger.py")
+    script_path = os.path.join(SCRIPTS_DIR, "sacem_logger.py")
+    subprocess.Popen([VENV_PYTHON, script_path])
     return jsonify({"status": "logged"})
 
 @app.route('/api/download_sacem')
@@ -118,32 +158,13 @@ def download_sacem():
     csv_path = os.path.join(SCRIPTS_DIR, "fiche_sacem.csv")
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(["Titre", "Artiste", "Durée de diffusion (secondes)", "Première diffusion", "Dernière diffusion"])
+        writer.writerow(["Titre", "Artiste", "Durée (sec)", "Première diffusion", "Dernière diffusion"])
         for tid, info in data.items():
             first = datetime.fromtimestamp(info['first_seen']).strftime('%Y-%m-%d %H:%M:%S')
             last = datetime.fromtimestamp(info['last_seen']).strftime('%Y-%m-%d %H:%M:%S')
             writer.writerow([info['title'], info['artist'], int(info['duration_sec']), first, last])
     
     return send_file(csv_path, as_attachment=True, download_name=f"sacem_{datetime.now().strftime('%Y%m%d_%H%M')}.csv")
-
-@app.route('/api/<action>')
-def handle_action(action):
-    if action == 'launch_impro':
-        run_script("impro_launcher.py", "Lip Sync impro seul")
-        return jsonify({"message": "Impro lancée"})
-    elif action == 'launch_cabaret':
-        run_script("impro_launcher.py", "Impro - Cabaret +16")
-        return jsonify({"message": "Cabaret lancé"})
-    elif action == 'launch_match':
-        run_script("impro_launcher.py", "Impro - Match +9")
-        return jsonify({"message": "Match lancé"})
-    elif action == 'fade':
-        run_script("spotify_fadeout.py")
-        return jsonify({"message": "Fondu..."})
-    elif action == 'stop':
-        run_script("spotify_stop.py")
-        return jsonify({"message": "Stop !"})
-    return jsonify({"message": "Inconnu"}), 404
 
 def get_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -159,5 +180,5 @@ def get_ip():
 if __name__ == '__main__':
     ip = get_ip()
     port = 5000
-    print(f"🚀 Serveur SACEM Remote démarré sur http://{ip}:{port}")
+    print(f"🚀 Serveur Régisseur IA démarré sur http://{ip}:{port}")
     app.run(host='0.0.0.0', port=port, debug=False)
